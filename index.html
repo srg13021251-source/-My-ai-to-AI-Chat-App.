@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#10111b">
+<title>My AI Chat</title>
+<style>
+:root{--bg:#10111b;--panel:#191b29;--panel2:#222538;--text:#f4f5ff;--muted:#a7abc2;--accent:#9b83ff;--line:#34374c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px system-ui;height:100dvh;overflow:hidden}
+button,input,textarea{font:inherit}
+button{cursor:pointer;border:0;color:inherit;background:var(--panel2);border-radius:12px;padding:10px 13px}
+button.primary{background:var(--accent);color:#171326;font-weight:700}
+button.ghost{background:transparent;border:1px solid var(--line)}
+#app{height:100dvh;display:flex;flex-direction:column;max-width:900px;margin:auto}
+header{height:62px;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--line);background:#151624}
+.logo{font-weight:800;font-size:18px;flex:1}
+.logo span{color:var(--accent)}
+#characterName{font-weight:700;max-width:42%;overflow:hidden}
+main{display:flex;flex:1;min-height:0;position:relative}
+#chatPane{display:flex;flex-direction:column;flex:1;min-width:0;position:relative;overflow:hidden}
+#backgroundLayer{position:absolute;inset:0;z-index:0;overflow:hidden;background:radial-gradient(ellipse at 30% 15%,#39305d 0,transparent 48%),linear-gradient(145deg,#17192a,#10111b)}
+#backgroundLayer img,#backgroundLayer video{width:100%;height:100%;object-fit:cover;opacity:.32}
+#backgroundLayer:after{content:"";position:absolute;inset:0;background:linear-gradient(#10111b88,#10111b99)}
+#messages{position:relative;z-index:1;flex:1;overflow-y:auto;padding:18px 13px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:84%;padding:11px 14px;border-radius:17px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.ai{align-self:flex-start;background:#24263aee;border-bottom-left-radius:5px}
+.msg.user{align-self:flex-end;background:#7861d9;color:white;border-bottom-right-radius:5px}
+.meta{font-size:11px;color:var(--muted);margin-bottom:4px}
+#composer{position:relative;z-index:2;padding:10px 12px;display:flex;gap:8px;background:#141624ee;border-top:1px solid var(--line)}
+#messageInput{flex:1;min-width:0;resize:none;max-height:110px;border:1px solid var(--line);border-radius:14px;background:#222538;color:white;padding:12px}
+#sendBtn{min-width:54px;background:var(--accent);color:#171326}
+#side{width:0;overflow:hidden;transition:width .2s;background:#171927;border-left:1px solid var(--line);z-index:3}
+#side.open{width:min(310px,86vw);overflow-y:auto}
+.sideInner{width:min(310px,86vw);padding:14px}
+.section{border-bottom:1px solid var(--line);padding:12px 0}
+.section h3{font-size:13px;color:var(--muted);margin:0 0 10px}
+.row{display:flex;gap:8px;align-items:center;margin:7px 0}
+.row button{flex:1}
+input[type=text]{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:#222538;color:white}
+label.file{display:inline-flex;justify-content:center;padding:10px;background:#292c42;border-radius:10px;cursor:pointer;flex:1}
+label.file input{display:none}
+.small{font-size:12px;color:var(--muted);line-height:1.45}
+.charBtn{text-align:left;display:flex;gap:9px;align-items:center;width:100%;margin:5px 0}
+.avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#51447e}
+#slotGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;max-height:220px;overflow:auto}
+.slot{aspect-ratio:1;border:1px dashed #555a75;border-radius:8px;display:grid;place-items:center;font-size:11px;color:var(--muted);overflow:hidden}
+.slot img{width:100%;height:100%;object-fit:cover}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+<button class="ghost" id="menuBtn">☰</button>
+<div class="logo">MY <span>AI</span></div>
+<div id="characterName">Assistant</div>
+<button class="ghost" id="newCharBtn">＋</button>
+</header>
+<main>
+<section id="chatPane">
+<div id="backgroundLayer"></div>
+<div id="messages">
+<div class="msg ai">Hello! Create a character and start chatting.</div>
+</div>
+<div id="composer">
+<textarea id="messageInput" rows="1" placeholder="Message..."></textarea>
+<button id="sendBtn">➤</button>
+</div>
+</section>
+<aside id="side">
+<div class="sideInner">
+<div class="section">
+<div class="row"><strong style="flex:1">Chat settings</strong><button id="closeSide">✕</button></div>
+<div id="characterList"></div>
+<button class="primary" id="createCharacter">＋ New character</button>
+</div>
+<div class="section">
+<h3>Character</h3>
+<input id="charNameInput" type="text" placeholder="Character name">
+<div class="row">
+<button id="saveChar" class="primary">Save name</button>
+<button id="deleteChar">Delete</button>
+</div>
+</div>
+<div class="section">
+<h3>Chat background</h3>
+<div class="row"><label class="file">Choose image / GIF<input id="bgImage" type="file" accept="image/*"></label></div>
+<div class="row"><label class="file">Choose looping video<input id="bgVideo" type="file" accept="video/*"></label></div>
+<button id="defaultBg">Default background</button>
+<p class="small">Backgrounds are saved on this device.</p>
+</div>
+<div class="section">
+<h3>Character gallery · 100 slots</h3>
+<label class="file">Add images<input id="slotUpload" type="file" accept="image/*" multiple></label>
+<div id="slotGrid"></div>
+<p class="small">Tap an image to select it for the character.</p>
+</div>
+<div class="section">
+<h3>AI connection</h3>
+<p class="small">This starter version uses demo replies. A secure AI provider connection is required for real AI conversations and image generation. Never put a secret API key in a public repository.</p>
+</div>
+</div>
+</aside>
+</main>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const DB='my_ai_chat_v1';
+let data={characters:[],active:0};
+
+function uid(){return 'c'+Date.now()+Math.random().toString(36).slice(2)}
+function load(){
+try{data=JSON.parse(localStorage.getItem(DB))||data}catch(e){}
+if(!data.characters||!data.characters.length)
+data={characters:[{id:uid(),name:'Assistant',messages:[],background:'',slots:Array(100).fill('')}],active:0};
+}
+function save(){
+try{localStorage.setItem(DB,JSON.stringify(data))}
+catch(e){alert('Storage full. Use smaller images.')}
+}
+function current(){return data.characters[data.active]}
+function addMessage(role,text,store=true){
+const d=document.createElement('div');
+d.className='msg '+role;
+const meta=document.createElement('div');
+meta.className='meta';
+meta.textContent=role==='user'?'You':current().name;
+d.append(meta,document.createTextNode(text));
+$('messages').append(d);
+$('messages').scrollTop=$('messages').scrollHeight;
+if(store){current().messages.push({role,text});save()}
+}
+function render(){
+const c=current();
+$('characterName').textContent=c.name;
+$('charNameInput').value=c.name;
+$('messages').innerHTML='';
+if(!c.messages.length)addMessage('ai','Hello! I am '+c.name+'. Send me a message.');
+else c.messages.forEach(m=>addMessage(m.role,m.text,false));
+renderChars();
+renderSlots();
+applyBackground();
+}
+function renderChars(){
+$('characterList').innerHTML='';
+data.characters.forEach((c,i)=>{
+const b=document.createElement('button');
+b.className='charBtn';
+const av=document.createElement('span');
+av.className='avatar';
+av.textContent=c.name[0].toUpperCase();
+const n=document.createElement('span');
+n.textContent=c.name;
+b.append(av,n);
+b.onclick=()=>{data.active=i;save();render()};
+$('characterList').append(b);
+});
+}
+function renderSlots(){
+$('slotGrid').innerHTML='';
+current().slots.forEach((src,i)=>{
+const s=document.createElement('div');
+s.className='slot';
+if(src){
+const im=document.createElement('img');
+im.src=src;
+s.append(im);
+s.onclick=()=>{current().avatar=src;save();alert('Character image selected')};
+}else s.textContent=i+1;
+$('slotGrid').append(s);
+});
+}
+function applyBackground(){
+const layer=$('backgroundLayer');
+layer.innerHTML='';
+const bg=current().background;
+if(!bg)return;
+if(bg.startsWith('data:video')){
+const v=document.createElement('video');
+v.src=bg;v.autoplay=true;v.loop=true;v.muted=true;v.playsInline=true;
+layer.append(v);
+}else{
+const im=document.createElement('img');
+im.src=bg;layer.append(im);
+}
+}
+function createCharacter(){
+const name=prompt('Character name?');
+if(!name||!name.trim())return;
+data.characters.push({id:uid(),name:name.trim(),messages:[],background:'',slots:Array(100).fill('')});
+data.active=data.characters.length-1;
+save();render();
+}
+function send(){
+const t=$('messageInput').value.trim();
+if(!t)return;
+$('messageInput').value='';
+addMessage('user',t);
+setTimeout(()=>addMessage('ai','I received your message: "'+t+'". Connect an AI provider for real AI replies.'),350);
+}
+$('sendBtn').onclick=send;
+$('messageInput').addEventListener('keydown',e=>{
+if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}
+});
+$('menuBtn').onclick=()=>$('side').classList.toggle('open');
+$('closeSide').onclick=()=>$('side').classList.remove('open');
+$('newCharBtn').onclick=createCharacter;
+$('createCharacter').onclick=createCharacter;
+$('saveChar').onclick=()=>{
+const n=$('charNameInput').value.trim();
+if(!n)return;
+current().name=n;save();render();
+};
+$('deleteChar').onclick=()=>{
+if(data.characters.length===1)return alert('Keep at least one character');
+if(confirm('Delete this character?')){
+data.characters.splice(data.active,1);
+data.active=0;save();render();
+}
+};
+function readFile(file,cb){
+const r=new FileReader();
+r.onload=()=>cb(r.result);
+r.readAsDataURL(file);
+}
+$('bgImage').onchange=e=>{
+const f=e.target.files[0];
+if(f)readFile(f,x=>{
+current().background=x;save();applyBackground();
+});
+e.target.value='';
+};
+$('bgVideo').onchange=e=>{
+const f=e.target.files[0];
+if(f){
+if(f.size>12*1024*1024)return alert('Choose a video under 12 MB');
+readFile(f,x=>{
+current().background=x;save();applyBackground();
+});
+}
+e.target.value='';
+};
+$('defaultBg').onclick=()=>{
+current().background='';save();applyBackground();
+};
+$('slotUpload').onchange=e=>{
+const files=Array.from(e.target.files);
+let i=0;
+function next(){
+if(i>=files.length){save();renderSlots();return}
+const index=current().slots.findIndex(x=>!x);
+if(index<0)return alert('All 100 slots are full');
+const f=files[i++];
+if(!f.type.startsWith('image/'))return next();
+readFile(f,x=>{current().slots[index]=x;next()});
+}
+next();e.target.value='';
+};
+load();render();
+</script>
+</body>
+</html>
